@@ -1,18 +1,17 @@
 from datetime import datetime
 
-def combine_scores(bm25_score, document_metadata, pagerank_score, weights):
+def combine_scores(bm25_score: float, document_metadata: dict, 
+                   pagerank_score: float, weights: dict) -> float:
     """
     Combines scores for a single document.
 
     Parameters:
-        query_terms: list
-            List of query terms.
         bm25_score: float
             BM25 score for the document.
         document_metadata: dict
             Metadata for the document.
         pagerank_score: float
-            Link analysis data for the document.
+            Pagerank score for the document.
         weights: dict
             Tunable weights for scoring components and subcomponents.
 
@@ -32,7 +31,7 @@ def combine_scores(bm25_score, document_metadata, pagerank_score, weights):
 
     return final_score
 
-def calculate_metadata_score(metadata, weights):
+def calculate_metadata_score(metadata: dict, weights: dict) -> float:
     """
     Calculate a metadata-based score for a document.
     """
