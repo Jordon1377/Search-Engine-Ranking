@@ -5,9 +5,7 @@ import os
 # Add the src directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-# Now you can import bm25
 import bm25
-
 
 class TestBM25Score(unittest.TestCase):
     def test_bm25_single_term(self):
