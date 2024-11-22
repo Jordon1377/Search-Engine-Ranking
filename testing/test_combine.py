@@ -6,7 +6,6 @@ from datetime import datetime
 # Add the src directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-from scoring_params import ScoringParams
 from combine import combine_scores
 
 class TestCombineScores(unittest.TestCase):
@@ -41,8 +40,9 @@ class TestCombineScores(unittest.TestCase):
         }
 
         # Test setup
-        params = ScoringParams(query_terms, bm25_score, document_metadata, link_data, weights)
-        score = combine_scores(params)
+        score = combine_scores(
+            query_terms, bm25_score, document_metadata, link_data, weights
+        )
 
         # Assertions
         self.assertGreater(score, 0)  # Score should always be positive
@@ -73,8 +73,9 @@ class TestCombineScores(unittest.TestCase):
         }
 
         # Test setup
-        params = ScoringParams(query_terms, bm25_score, document_metadata, link_data, weights)
-        score = combine_scores(params)
+        score = combine_scores(
+            query_terms, bm25_score, document_metadata, link_data, weights
+        )
 
         # Assertions
         self.assertGreater(score, 0)  # Score should still be positive
@@ -112,8 +113,9 @@ class TestCombineScores(unittest.TestCase):
         }
 
         # Test setup
-        params = ScoringParams(query_terms, bm25_score, document_metadata, link_data, weights)
-        score = combine_scores(params)
+        score = combine_scores(
+            query_terms, bm25_score, document_metadata, link_data, weights
+        )
 
         # Assertions
         self.assertGreater(score, 0)  # Score should remain positive
@@ -150,8 +152,9 @@ class TestCombineScores(unittest.TestCase):
         }
 
         # Test setup
-        params = ScoringParams(query_terms, bm25_score, document_metadata, link_data, weights)
-        score = combine_scores(params)
+        score = combine_scores(
+            query_terms, bm25_score, document_metadata, link_data, weights
+        )
 
         # Assertions
         self.assertGreater(score, 0)  # Metadata and link analysis should contribute

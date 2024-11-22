@@ -1,25 +1,33 @@
 from datetime import datetime
-from scoring_params import ScoringParams
 
-def combine_scores(params: ScoringParams):
+def combine_scores(query_terms, bm25_score, document_metadata, link_data, weights):
     """
     Combines scores for a single document.
 
     Parameters:
-        params: ScoringParams
+        query_terms: list
+            List of query terms.
+        bm25_score: float
+            BM25 score for the document.
+        document_metadata: dict
+            Metadata for the document.
+        link_data: dict
+            Link analysis data for the document.
+        weights: dict
+            Tunable weights for scoring components and subcomponents.
 
     Returns:
         float
             Final combined score for the document.
     """
-    bm25_weighted = params.weights.get("bm25", 1.0) * params.bm25_score
+    bm25_weighted = weights.get("bm25", 1.0) * bm25_score
     metadata_score = calculate_metadata_score(
-        params.document_metadata,
-        params.weights.get("metadata", {})
+        document_metadata,
+        weights.get("metadata", {})
     )
     link_score = calculate_link_score(
-        params.link_data,
-        params.weights.get("link_analysis", {})
+        link_data,
+        weights.get("link_analysis", {})
     )
 
     # Combine scores
