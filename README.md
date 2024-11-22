@@ -19,7 +19,7 @@ python -m unittest -v
 ```
 To run the tests with coverage, you can use the following command:
 ```bash
-coverage run -m unittest -s testing
+coverage run -m unittest
 ```
 
 ## Create cache
