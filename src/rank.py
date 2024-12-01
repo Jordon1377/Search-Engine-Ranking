@@ -30,7 +30,7 @@ def rank_documents(query: str, avg_doc_len: float, weights: dict,
     query_terms = tokenize_query(query)
     relevant_docs = fetch_relevant_docs(query_terms)
     metadata = fetch_doc_metadata(relevant_docs)
-    k1, b = get_bm25_params(weights)
+    k1, b, avg_doc_len = get_bm25_params(weights)
 
     # Process and score each document
     ranked_results = []
