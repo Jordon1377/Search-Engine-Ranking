@@ -20,11 +20,20 @@ class TestBM25Score(unittest.TestCase):
         total_docs = 100
         avgdl = 2000
         k1, b = 1.5, 0.75
-        idf_data = calculate_idf(total_docs, num_docs_with_term["data"])
-        expected_score = idf_data * ((5 * (k1 + 1)) \
-            / (5 + k1 * (1 - b + b * (2450 / avgdl))))
-        calculated_score = bm25_score(
-            query_terms, document, k1, b, avgdl, total_docs, num_docs_with_term
+        expected_score = 0.0
+        for term in query_terms:
+            term_freq = document["term_frequency"].get(term, 0)
+            idf_term = calculate_idf(total_docs, num_docs_with_term.get(term, 0))
+            numerator = term_freq * (k1 + 1)
+            denominator = term_freq + k1 * (1 - b + b * (document["docLength"] / avgdl))
+            expected_score += idf_term * (numerator / denominator)
+
+        calculated_score = sum(
+            bm25_score(
+                term, {"frequency": document["term_frequency"].get(term, 0)}, 
+                {"docLength": document["docLength"]}, k1, b, avgdl, total_docs, 
+                num_docs_with_term.get(term, 0)
+            ) for term in query_terms
         )
         self.assertAlmostEqual(calculated_score, expected_score, places=2)
 
@@ -39,14 +48,20 @@ class TestBM25Score(unittest.TestCase):
         total_docs = 100
         avgdl = 2000
         k1, b = 1.5, 0.75
-        idf_data = calculate_idf(total_docs, num_docs_with_term["data"])
-        idf_science = calculate_idf(total_docs, num_docs_with_term["science"])
-        expected_score = (
-            idf_data * ((5 * (k1 + 1)) / (5 + k1 * (1 - b + b * (2450 / avgdl)))) +
-            idf_science * ((2 * (k1 + 1)) / (2 + k1 * (1 - b + b * (2450 / avgdl))))
-        )
-        calculated_score = bm25_score(
-            query_terms, document, k1, b, avgdl, total_docs, num_docs_with_term
+        expected_score = 0.0
+        for term in query_terms:
+            term_freq = document["term_frequency"].get(term, 0)
+            idf_term = calculate_idf(total_docs, num_docs_with_term.get(term, 0))
+            numerator = term_freq * (k1 + 1)
+            denominator = term_freq + k1 * (1 - b + b * (document["docLength"] / avgdl))
+            expected_score += idf_term * (numerator / denominator)
+
+        calculated_score = sum(
+            bm25_score(
+                term, {"frequency": document["term_frequency"].get(term, 0)}, 
+                {"docLength": document["docLength"]}, k1, b, avgdl, total_docs, 
+                num_docs_with_term.get(term, 0)
+            ) for term in query_terms
         )
         self.assertAlmostEqual(calculated_score, expected_score, places=2)
 
@@ -62,8 +77,12 @@ class TestBM25Score(unittest.TestCase):
         avgdl = 2000
         k1, b = 1.5, 0.75
         expected_score = 0.0
-        calculated_score = bm25_score(
-            query_terms, document, k1, b, avgdl, total_docs, num_docs_with_term
+        calculated_score = sum(
+            bm25_score(
+                term, {"frequency": document["term_frequency"].get(term, 0)}, 
+                {"docLength": document["docLength"]}, k1, b, avgdl, total_docs, 
+                num_docs_with_term.get(term, 0)
+            ) for term in query_terms
         )
         self.assertAlmostEqual(calculated_score, expected_score, places=2)
 
@@ -79,8 +98,12 @@ class TestBM25Score(unittest.TestCase):
         avgdl = 2000
         k1, b = 1.5, 0.75
         expected_score = 0.0
-        calculated_score = bm25_score(
-            query_terms, document, k1, b, avgdl, total_docs, num_docs_with_term
+        calculated_score = sum(
+            bm25_score(
+                term, {"frequency": document["term_frequency"].get(term, 0)}, 
+                {"docLength": document["docLength"]}, k1, b, avgdl, total_docs, 
+                num_docs_with_term.get(term, 0)
+            ) for term in query_terms
         )
         self.assertAlmostEqual(calculated_score, expected_score, places=2)
 
@@ -95,11 +118,20 @@ class TestBM25Score(unittest.TestCase):
         total_docs = 100
         avgdl = 2000
         k1, b = 1.5, 0.75
-        idf_data = calculate_idf(total_docs, num_docs_with_term["data"])
-        expected_score = idf_data * ((3 * (k1 + 1)) \
-            / (3 + k1 * (1 - b + b * (500 / avgdl))))
-        calculated_score = bm25_score(
-            query_terms, document, k1, b, avgdl, total_docs, num_docs_with_term
+        expected_score = 0.0
+        for term in query_terms:
+            term_freq = document["term_frequency"].get(term, 0)
+            idf_term = calculate_idf(total_docs, num_docs_with_term.get(term, 0))
+            numerator = term_freq * (k1 + 1)
+            denominator = term_freq + k1 * (1 - b + b * (document["docLength"] / avgdl))
+            expected_score += idf_term * (numerator / denominator)
+
+        calculated_score = sum(
+            bm25_score(
+                term, {"frequency": document["term_frequency"].get(term, 0)}, 
+                {"docLength": document["docLength"]}, k1, b, avgdl, total_docs, 
+                num_docs_with_term.get(term, 0)
+            ) for term in query_terms
         )
         self.assertAlmostEqual(calculated_score, expected_score, places=2)
 

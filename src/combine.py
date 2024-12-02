@@ -47,17 +47,12 @@ def calculate_metadata_score(metadata: dict, weights: dict) -> float:
         return 0
 
     freshness_weight = weights.get("freshness", 1.0)
-    doc_type_weights = weights.get("docType", {})
 
     # Freshness based on timeLastUpdated
     freshness_score = 0
     if "timeLastUpdated" in metadata:
-        last_update_time = datetime.fromisoformat(metadata["timeLastUpdated"])
-        time_diff = datetime.now(timezone.utc) - last_update_time
+        last_update_time = datetime.fromisoformat(metadata["timeLastUpdated"].replace('Z', '+00:00'))
+        time_diff = datetime.now(timezone.utc) - last_update_time.astimezone(timezone.utc)
         freshness_score = freshness_weight / max(1, time_diff.days)
 
-    # Document type influence
-    # FIXME: this
-    doc_type_score = doc_type_weights.get(metadata.get("docType", ""), 0.5)
-
-    return freshness_score + doc_type_score
+    return freshness_score

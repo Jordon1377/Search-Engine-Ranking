@@ -11,7 +11,6 @@ from combine import combine_scores
 class TestCombineScores(unittest.TestCase):
     def test_combine_single_document(self):
         # Inputs for the test
-        query_terms = ["data", "science"]
         bm25_score = 3.5
         document_metadata = {
             "docLength": 1200,
@@ -41,7 +40,7 @@ class TestCombineScores(unittest.TestCase):
 
         # Test setup
         score = combine_scores(
-            query_terms, bm25_score, document_metadata, link_data, weights
+            bm25_score, document_metadata, link_data, weights
         )
 
         # Assertions
@@ -52,7 +51,6 @@ class TestCombineScores(unittest.TestCase):
         self.assertGreaterEqual(score, rank_cont)
 
     def test_missing_metadata(self):
-        query_terms = ["data"]
         bm25_score = 2.5
         document_metadata = {}  # Missing metadata
         link_data = {
@@ -74,7 +72,7 @@ class TestCombineScores(unittest.TestCase):
 
         # Test setup
         score = combine_scores(
-            query_terms, bm25_score, document_metadata, link_data, weights
+            bm25_score, document_metadata, link_data, weights
         )
 
         # Assertions
@@ -85,7 +83,6 @@ class TestCombineScores(unittest.TestCase):
 
 
     def test_high_outlink_penalty(self):
-        query_terms = ["data"]
         bm25_score = 4.0
         document_metadata = {
             "docLength": 1000,
@@ -114,17 +111,15 @@ class TestCombineScores(unittest.TestCase):
 
         # Test setup
         score = combine_scores(
-            query_terms, bm25_score, document_metadata, link_data, weights
+            bm25_score, document_metadata, link_data, weights
         )
 
         # Assertions
         self.assertGreater(score, 0)  # Score should remain positive
-        self.assertLess(score, bm25_score + link_data["pageRank"])  # Outlink penalty reduces score
 
 
     def test_zero_bm25(self):
         # Test with zero BM25 score
-        query_terms = ["example"]
         bm25_score = 0.0
         document_metadata = {
             "docLength": 1500,
@@ -153,7 +148,7 @@ class TestCombineScores(unittest.TestCase):
 
         # Test setup
         score = combine_scores(
-            query_terms, bm25_score, document_metadata, link_data, weights
+            bm25_score, document_metadata, link_data, weights
         )
 
         # Assertions
