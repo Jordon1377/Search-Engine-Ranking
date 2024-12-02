@@ -1,21 +1,20 @@
 from typing import Callable
+
 from bm25 import bm25_score, get_bm25_params
 from combine import combine_scores
 
-def rank_documents(query: str, avg_doc_len: float, weights: dict, 
-                   fetch_relevant_docs: Callable[[str], list], 
-                   fetch_doc_metadata: Callable[[str], dict], 
+def rank_documents(query: str, weights: dict,
+                   fetch_total_doc_statistics: Callable[[str], list],
+                   fetch_relevant_docs: Callable[[str], list],
+                   fetch_doc_metadata: Callable[[str], dict],
                    fetch_pagerank: Callable[[str], float]) -> list:
     """
     Full ranking algorithm for retrieving and ranking documents.
 
     Parameters:
-        query: str
-            The search query entered by the user.
-        avg_doc_len: float
-            Pre-computed average document length for BM25 scoring.
-        weights: dict
-            Weights for scoring components, including BM25, metadata, and link analysis.
+        query: str The search query entered by the user.
+        weights: dict Weights for scoring components.
+        fetch_total_doc_statistics: Callable[[str], list],
         fetch_relevant_docs: Callable[[str], list]
             API call that returns all relevant documents for a given query term.
         fetch_doc_metadata: Callable[[str], dict]
@@ -26,32 +25,38 @@ def rank_documents(query: str, avg_doc_len: float, weights: dict,
         list of dict
             Ranked documents with metadata and final scores.
     """
-    # Tokenize query and retrieve relevant documents
+    avg_doc_len, total_docs = fetch_total_doc_statistics().values()
+    k1, b = get_bm25_params(weights)
     query_terms = tokenize_query(query)
-    relevant_docs = fetch_relevant_docs(query_terms)
-    metadata = fetch_doc_metadata(relevant_docs)
-    k1, b, avg_doc_len = get_bm25_params(weights)
 
     # Process and score each document
-    ranked_results = []
-    for doc_id, doc_data in relevant_docs.items():
-        document_metadata = metadata.get(doc_id, {})
-        pagerank_score = fetch_pagerank(metadata.get(doc_id, {}))
+    ranked_results = {}
+    for term in query_terms:
+        relevant_docs = fetch_relevant_docs(term)
+        if not relevant_docs: continue
 
-        # Compute Scores
-        bm25_score_value = bm25_score(
-            query_terms, doc_data, inverted_index, k1, b, avg_doc_len
-        )
-        combined_score = combine_scores(
-            bm25_score_value, document_metadata, pagerank_score, weights
-        )
-        ranked_results.append({
-            "docID": doc_id,
-            "score": combined_score,
-            "metadata": document_metadata
-        })
+        for doc in relevant_docs["index"]:
+            doc_id = doc["docID"]
+            metadata = fetch_doc_metadata(doc_id)["metadata"]
+            pagerank_score = fetch_pagerank(metadata["URL"])
 
-    return sort_ranked_results(ranked_results)
+            # Compute Scores
+            doc_occurances = len(relevant_docs["index"])
+            bm25_value = bm25_score(
+                term, doc, metadata, k1, b, avg_doc_len, total_docs, doc_occurances
+            )
+            combined_score = combine_scores(
+                bm25_value, metadata, pagerank_score, weights
+            )
+
+            ranked_results.setdefault(doc_id, {
+                "docID": doc_id,
+                "score": 0,
+                "metadata": metadata
+            })
+            ranked_results[doc_id]["score"] += combined_score
+
+    return sort_ranked_results(list(ranked_results.values()))
 
 def tokenize_query(query: str):
     """
@@ -65,9 +70,15 @@ def tokenize_query(query: str):
     unigrams = words
     bigrams = generate_ngrams(words, 2)
     trigrams = generate_ngrams(words, 3)
-    
+
     return unigrams + bigrams + trigrams
 
 def sort_ranked_results(ranked_results: list):
     """Sort ranked documents by score in descending order."""
-    return sorted(ranked_results, key=lambda x: x["score"], reverse=True)
+    results = sorted(ranked_results, key=lambda x: x["score"], reverse=True)
+
+    # Add rank into return
+    for rank, result in enumerate(results, start=1):
+        result["rank"] = rank
+
+    return results

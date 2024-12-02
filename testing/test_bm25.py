@@ -124,42 +124,26 @@ class TestGetBM25Params(unittest.TestCase):
     def test_bm25_params_with_all_defaults(self):
         """Test BM25 parameter extraction with no explicit weights."""
         weights = {}
-        expected_k1, expected_b, expected_avg_doc_len = 1.5, 0.75, 1500
-        self.assertEqual(
-            get_bm25_params(weights),
-            (expected_k1, expected_b, expected_avg_doc_len)
-        )
+        expected_k1, expected_b = 1.5, 0.75
+        self.assertEqual(get_bm25_params(weights), (expected_k1, expected_b))
 
     def test_bm25_params_with_partial_weights(self):
         """Test BM25 parameter extraction with some custom values."""
         weights = {"bm25_params": {"k1": 1.2}}
-        expected_k1, expected_b, expected_avg_doc_len = 1.2, 0.75, 1500
-        self.assertEqual(
-            get_bm25_params(weights),
-            (expected_k1, expected_b, expected_avg_doc_len)
-        )
+        expected_k1, expected_b = 1.2, 0.75
+        self.assertEqual(get_bm25_params(weights), (expected_k1, expected_b))
 
     def test_bm25_params_with_all_custom_weights(self):
         """Test BM25 parameter extraction with all custom values."""
-        weights = {"bm25_params": {
-            "k1": 1.8, "b": 0.65, "avg_doc_len": 1800}
-        }
-        expected_k1, expected_b, expected_avg_doc_len = 1.8, 0.65, 1800
-        self.assertEqual(
-            get_bm25_params(weights),
-            (expected_k1, expected_b, expected_avg_doc_len)
-        )
+        weights = {"bm25_params": { "k1": 1.8, "b": 0.65} }
+        expected_k1, expected_b = 1.8, 0.65
+        self.assertEqual(get_bm25_params(weights), (expected_k1, expected_b))
 
     def test_bm25_params_with_nested_structure(self):
         """Test BM25 parameter extraction with unexpected structures."""
-        weights = {"bm25_params": {
-            "k1": 2.0, "nested": {"b": 0.7}
-        }, "avg_doc_len": 1600}
-        expected_k1, expected_b, expected_avg_doc_len = 2.0, 0.75, 1500
-        self.assertEqual(
-            get_bm25_params(weights),
-            (expected_k1, expected_b, expected_avg_doc_len)
-        )
+        weights = {"bm25_params": { "k1": 2.0, "nested": {"b": 0.7} }}
+        expected_k1, expected_b = 2.0, 0.75
+        self.assertEqual(get_bm25_params(weights), (expected_k1, expected_b))
 
 if __name__ == "__main__":
     unittest.main()
