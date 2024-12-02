@@ -1,5 +1,6 @@
 # Basic REST API server that returns document scores for a given query
 from flask import Flask, request, jsonify
+from apscheduler.schedulers.background import BackgroundScheduler
 from rank import rank_documents
 import requests
 import os
@@ -13,6 +14,10 @@ LINK_ANALYSIS_IP = os.getenv('LINK_ANALYSIS_IP')
 DATA_EVAL_IP = os.getenv('DATA_EVAL_IP')
 INDEX_RANKING_IP = os.getenv('INDEX_RANKING_IP')
 QUERY_UI_IP = os.getenv('QUERY_UI_IP')
+
+@app.route('/status', methods=['GET']) 
+def healthCheck():
+    return jsonify({"status": "healthy"})
 
 @app.route('/getDocScores', methods=['GET'])
 def getDocScores() -> list:
@@ -43,7 +48,7 @@ def getDocScores() -> list:
     
     print(f"Query: {query}, Start: {start}, End: {end}")
 
-    weights = {"bm25": 0.5, "pagerank": 0.5} # TODO: replace with actual weights, placeholder for now
+    weights = {} # TODO: replace with actual weights, placeholder for now
     doc_scores = rank_documents(query, weights, fetchTotalDocStatistics, fetchRelevantDocs, fetchDocMetadata, fetchPageRank)
     if not doc_scores:
         return jsonify({"error": "Internal server error"}, 500)
@@ -66,7 +71,7 @@ def fetchTotalDocStatistics(query: str) -> dict:
 
     ip = INDEX_RANKING_IP
     port = '???' # TODO: fill in the port number
-    endpoint = 'getAvgDocLen'
+    endpoint = 'getTotalDocStatistics'
     endpoint_url = f'http://{ip}:{port}/{endpoint}'
     data = {"query": query}
     response = requests.get(endpoint_url, json=data)
@@ -139,5 +144,22 @@ def fetchPageRank(url: str) -> dict:
         return None
     return response.json()
 
+def sendMetrics():
+    # send metrics to the data evaluation team
+    ip = DATA_EVAL_IP
+    port = '???' # TODO: fill in the port number
+    endpoint = 'updateMetrics'
+    endpoint_url = f'http://{ip}:{port}/{endpoint}'
+    data = {"metrics": "???"} # TODO: fill in the metrics
+
+    try:
+        response = requests.post(endpoint_url, json=data)
+        print(f"Data sent. Response: {response.status_code}, {response.text}")
+    except Exception as e:
+        print(f"Error sending metrics: {e}")
+
 if __name__ == '__main__':
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(sendMetrics, 'interval', hours=24)
+    scheduler.start()
     app.run(debug=True, port=42069)
