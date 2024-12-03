@@ -4,8 +4,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from rank import rank_documents
 import requests
 import os
+import cache
 
 app = Flask(__name__)
+
 
 # IPs for the other VMs. May need to change this later since we haven't decided how things talk to each other.
 # Also, pretty sure not all of these teams need access to our API so maybe delete some of these?
@@ -49,11 +51,18 @@ def getDocScores() -> list:
     print(f"Query: {query}, Start: {start}, End: {end}")
 
     weights = {} # TODO: replace with actual weights, placeholder for now
+    if redis_cache and redis_cache.exists(query):
+        #Return type not correct
+        return redis_cache.get(query)
+
     doc_scores = rank_documents(query, weights, fetchTotalDocStatistics, fetchRelevantDocs, fetchDocMetadata, fetchPageRank)
     if not doc_scores:
         return jsonify({"error": "Internal server error"}, 500)
     if start and end:
         doc_scores = doc_scores[start:end]
+
+    if redis_cache:
+        redis_cache.set(query, jsonify(doc_scores))
 
     return jsonify(doc_scores)
 
@@ -163,3 +172,4 @@ if __name__ == '__main__':
     scheduler.add_job(sendMetrics, 'interval', hours=24)
     scheduler.start()
     app.run(debug=True, port=42069)
+    redis_cache = cache.createCache()
