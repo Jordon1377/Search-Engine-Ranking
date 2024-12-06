@@ -2,12 +2,9 @@
 from flask import Flask, request, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 from rank import rank_documents
+from cache import createCache
 import requests
 import os
-import cache
-
-app = Flask(__name__)
-
 
 # IPs for the other VMs. May need to change this later since we haven't decided how things talk to each other.
 # Also, pretty sure not all of these teams need access to our API so maybe delete some of these?
@@ -16,6 +13,51 @@ LINK_ANALYSIS_IP = os.getenv('LINK_ANALYSIS_IP')
 DATA_EVAL_IP = os.getenv('DATA_EVAL_IP')
 INDEX_RANKING_IP = os.getenv('INDEX_RANKING_IP')
 QUERY_UI_IP = os.getenv('QUERY_UI_IP')
+
+class QueryMetrics:
+    def __init__(self, query: str):
+        self.query = query
+        self.totalDocs = 0
+        self.parsedDocs = 0
+        self.returnedDocs = 0
+        self.timeToRank = 0
+        self.inCache = False
+
+    def __init__(self, query: str, totalDocs: int, parsedDocs: int, returnedDocs: int, timeToRank: float, inCache: bool):
+        self.query = query
+        self.totalDocs = totalDocs
+        self.parsedDocs = parsedDocs
+        self.returnedDocs = returnedDocs
+        self.timeToRank = timeToRank
+        self.inCache = inCache
+
+    def __str__(self):
+        return f"Query: {self.query}, Total Docs: {self.totalDocs}, Parsed Docs: {self.parsedDocs}, Returned Docs: {self.returnedDocs}, Time to Rank: {self.timeToRank}, In Cache: {self.inCache}"
+    
+    def __repr__(self):
+        return self.__str__()
+    
+    def toDict(self):
+        return {
+            "label": "ranked_docs",
+            "value": {
+                "query": self.query,
+                "totalDocs": self.totalDocs,
+                "parsedDocs": self.parsedDocs,
+                "returnedDocs": self.returnedDocs,
+                "timeToRank": self.timeToRank,
+                "inCache": self.inCache
+            }
+        }
+
+app = Flask(__name__)
+app.config['ENV'] = 'production'
+app.config['DEBUG'] = False
+app.config['TESTING'] = False
+
+redis_cache = None
+
+queryMetricsList: list[QueryMetrics] = []
 
 @app.route('/status', methods=['GET']) 
 def healthCheck():
@@ -31,8 +73,8 @@ def getDocScores() -> list:
             Ranked documents with metadata and final scores.
     """
 
-    if request.remote_addr not in ['127.0.0.1', ACT_TRANSFORM_IP, LINK_ANALYSIS_IP, DATA_EVAL_IP, INDEX_RANKING_IP, QUERY_UI_IP]:
-        return jsonify({"error": "Unauthorized"}, 401)
+    # if request.remote_addr not in ['127.0.0.1', '0.0.0.0', ACT_TRANSFORM_IP, LINK_ANALYSIS_IP, DATA_EVAL_IP, INDEX_RANKING_IP, QUERY_UI_IP]:
+        # return jsonify({"error": "Unauthorized"}, 401)
 
     data = request.get_json()
     query = data.get('query')
@@ -51,10 +93,13 @@ def getDocScores() -> list:
     print(f"Query: {query}, Start: {start}, End: {end}")
 
     weights = {} # TODO: replace with actual weights, placeholder for now
-    if redis_cache and redis_cache.exists(query):
-        #Return type not correct
-        return redis_cache.get(query)
-
+    
+    try:
+        if redis_cache and redis_cache.exists(query):
+            return jsonify(redis_cache.get(query))
+    except Exception as e:
+        print(f"Error accessing cache for query: {query} - {e}")
+    
     doc_scores = rank_documents(query, weights, fetchTotalDocStatistics, fetchRelevantDocs, fetchDocMetadata, fetchPageRank)
     if not doc_scores:
         return jsonify({"error": "Internal server error"}, 500)
@@ -64,22 +109,26 @@ def getDocScores() -> list:
     if redis_cache:
         redis_cache.set(query, jsonify(doc_scores))
 
+    queryMetricsList.append(QueryMetrics(query, 0, 0, len(doc_scores), 0, False))
+
     return jsonify(doc_scores)
 
 # TODO: This is probably not how this is supposed to be implemented
-def fetchTotalDocStatistics(query: str) -> dict:
+def fetchTotalDocStatistics(query: str) -> list:
     """
     Fetches the total document statistics for a given query.
 
     Parameters:
         query: str The search query entered by the user.
     Returns:
-        dict
-            The total document statistics for a given query.
+        list
+            Total document statistics for a given query.
+    Component:
+        Indexing
     """
 
     ip = INDEX_RANKING_IP
-    port = '???' # TODO: fill in the port number
+    port = 8080 # TODO: fill in the port number
     endpoint = 'getTotalDocStatistics'
     endpoint_url = f'http://{ip}:{port}/{endpoint}'
     data = {"query": query}
@@ -89,19 +138,21 @@ def fetchTotalDocStatistics(query: str) -> dict:
     return response.json()
 
 # TODO: This is probably not how this is supposed to be implemented
-def fetchRelevantDocs(query: str) -> dict:
+def fetchRelevantDocs(query: str) -> list:
     """
     Fetches all relevant documents for a given query term.
 
     Parameters:
         query: str The search query entered by the user.
     Returns:
-        dict
+        list
             All relevant documents for a given query term.
+    Component: 
+        Indexing
     """
         
     ip = INDEX_RANKING_IP
-    port = '???' # TODO: fill in the port number
+    port = 8080 # TODO: fill in the port number
     endpoint = 'getDocsFromIndex'
     endpoint_url = f'http://{ip}:{port}/{endpoint}'
     # go through each term in the query and get the relevant docs
@@ -120,11 +171,13 @@ def fetchDocMetadata(docID: int) -> dict:
     Returns:
         dict
             Metadata for a document given a doc id.
+    Component:
+        Indexing
     """
 
     ip = INDEX_RANKING_IP
-    port = '???' # TODO: fill in the port number
-    endpoint = 'getDocMetadata'
+    port = 8080 # TODO: fill in the port number
+    endpoint = 'getDocumentMetadata'
     endpoint_url = f'http://{ip}:{port}/{endpoint}'
     data = {"docID": docID}
     response = requests.get(endpoint_url, json=data)
@@ -132,34 +185,46 @@ def fetchDocMetadata(docID: int) -> dict:
         return None
     return response.json()    
 
-def fetchPageRank(url: str) -> dict:
+def fetchPageRank(url: str) -> float:
     """
     Fetches pagerank score for a document given a doc id.
 
     Parameters:
         url: str The URL of the document.
     Returns:
-        dict
+        float
             Pagerank score for a document given a doc id.
+    Component:
+        Link Analysis
     """
 
     ip = LINK_ANALYSIS_IP
-    port = '???' # TODO: fill in the port number
-    endpoint = 'getPageRank'
-    endpoint_url = f'http://{ip}:{port}/{endpoint}'
-    data = {"url": url}
-    response = requests.get(endpoint_url, json=data)
+    port = 1234 # TODO: fill in the port number
+    endpoint = 'ranking/score'
+    endpoint_url = f'http://{ip}:{port}/{endpoint}/{url}'
+    response = requests.get(endpoint_url)
     if response.status_code != 200:
         return None
-    return response.json()
+    
+    rank = response.json().get('page_rank')
+    if not rank:
+        return None
+    return rank
 
-def sendMetrics():
+def reportMetrics():
+    """
+    Send metrics to the data evaluation team. Called every 24 hours by the scheduler.
+
+    Component:
+        Data Evaluation
+    """
     # send metrics to the data evaluation team
     ip = DATA_EVAL_IP
-    port = '???' # TODO: fill in the port number
-    endpoint = 'updateMetrics'
+    port = '8080' # TODO: fill in the port number
+    endpoint = '/v0/ReportMetrics'
     endpoint_url = f'http://{ip}:{port}/{endpoint}'
-    data = {"metrics": "???"} # TODO: fill in the metrics
+    query_metrics = [metric.toDict() for metric in queryMetricsList]
+    data = {"metrics": query_metrics}
 
     try:
         response = requests.post(endpoint_url, json=data)
@@ -169,7 +234,7 @@ def sendMetrics():
 
 if __name__ == '__main__':
     scheduler = BackgroundScheduler()
-    scheduler.add_job(sendMetrics, 'interval', hours=24)
+    scheduler.add_job(reportMetrics, 'interval', hours=24)
     scheduler.start()
-    app.run(debug=True, port=42069)
-    redis_cache = cache.createCache()
+    redis_cache = createCache()
+    app.run(debug=True)
