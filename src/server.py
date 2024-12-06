@@ -92,7 +92,20 @@ def getDocScores() -> list:
     
     print(f"Query: {query}, Start: {start}, End: {end}")
 
-    weights = {} # TODO: replace with actual weights, placeholder for now
+    weights = {'bm25_params': {
+            'k1': 3.3564610481262207,
+            'b': 0.6601634621620178
+        }, 
+        'bm25': 0.8437421917915344, 
+        'pageRank': {
+           'pageRank': -2.149700549125555e-06,
+           'inLink': 1.035431068885373e-05, 
+           'outLink': -0.01162341237068176
+        }, 
+       'metadata': {
+           'freshness': 0.7459535598754883
+       }
+    }
     
     try:
         if redis_cache and redis_cache.exists(query):

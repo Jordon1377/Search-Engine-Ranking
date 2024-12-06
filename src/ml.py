@@ -10,21 +10,21 @@ from rank import rank_documents
 
 # Model -----------------------------------------------------------------------
 class WeightedRankNet(nn.Module):
-    def __init__(self, input_dim, weights):
+    def __init__(self, input_dim):
         super(WeightedRankNet, self).__init__()
-        self.weights = nn.ParameterDict({
-            key: (
-                nn.Parameter(torch.tensor(value, dtype=torch.float32))
-                if isinstance(value, float)
-                else nn.ParameterDict({
-                    k: nn.Parameter(torch.tensor(v, dtype=torch.float32))
-                    for k, v in value.items()
-                })
-                if isinstance(value, dict)
-                else None
-            )
-            for key, value in weights.items()
-        })
+
+        # Define the weights as fixed parameters
+        self.bm25_k1 = nn.Parameter(torch.tensor(3.5, dtype=torch.float32), requires_grad=True)
+        self.bm25_b = nn.Parameter(torch.tensor(0.5, dtype=torch.float32), requires_grad=True)
+        self.bm25_weight = nn.Parameter(torch.tensor(1.0, dtype=torch.float32), requires_grad=True)
+        
+        self.page_rank = nn.Parameter(torch.tensor(0.2, dtype=torch.float32), requires_grad=True)
+        self.in_link = nn.Parameter(torch.tensor(0.1, dtype=torch.float32), requires_grad=True)
+        self.out_link = nn.Parameter(torch.tensor(0.1, dtype=torch.float32), requires_grad=True)
+
+        self.freshness = nn.Parameter(torch.tensor(1.0, dtype=torch.float32), requires_grad=True)
+
+        # Define the model layers
         self.model = nn.Sequential(
             nn.Linear(input_dim, 64),
             nn.ReLU(),
@@ -33,15 +33,78 @@ class WeightedRankNet(nn.Module):
             nn.Linear(32, 1)  # Output relevance score
         )
 
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, batch_indices):
+        """
+        Compute scores for the documents in the current batch based on their indices (doc IDs).
+        """
+        global global_features  # Use global features
+        avg_doc_len, total_docs = fetch_total_doc_statistics_mslr().values()  # Corpus stats
+        total_docs_tensor = torch.tensor(float(total_docs), dtype=torch.float32)  # Convert to tensor
+        avg_doc_len_tensor = torch.tensor(float(avg_doc_len), dtype=torch.float32)  # Convert to tensor
+        weights = {
+            "bm25_params": {"k1": self.bm25_k1, "b": self.bm25_b},
+            "bm25": self.bm25_weight,
+            "pageRank": {
+                "pageRank": self.page_rank,
+                "inLink": self.in_link,
+                "outLink": self.out_link,
+            },
+            "metadata": {"freshness": self.freshness},
+        }
+
+        # Ensure batch_indices is a list of integers
+        if isinstance(batch_indices, torch.Tensor):
+            batch_indices = batch_indices.tolist()  # Convert tensor to list
+
+        scores = []
+        for doc_id in batch_indices:  # Process each doc_id in the batch
+            feature_vector = global_features[doc_id]  # Access feature vector directly
+
+            # Extract query and document information
+            query = str(feature_vector[4])  # Feature 5 is the query term
+            metadata = fetch_doc_metadata_mslr(doc_id)["metadata"]
+            pagerank_data = fetch_pagerank_mslr(metadata["URL"])
+
+            # BM25 scoring
+            term_freq = torch.tensor(float(feature_vector[24]), dtype=torch.float32)  # Term frequency
+            doc_length = torch.tensor(float(metadata["docLength"]), dtype=torch.float32)  # Document length
+            num_docs_with_term = torch.tensor(len(global_features), dtype=torch.float32)  # Total number of docs
+
+            idf_term = torch.log((total_docs_tensor - num_docs_with_term + 0.5) / (num_docs_with_term + 0.5) + 1)
+            numerator = term_freq * (weights["bm25_params"]["k1"] + 1)
+            denominator = term_freq + weights["bm25_params"]["k1"] * (
+                1 - weights["bm25_params"]["b"] + weights["bm25_params"]["b"] * (doc_length / avg_doc_len_tensor)
+            )
+            bm25_score = idf_term * (numerator / denominator)
+
+            # Pagerank scoring
+            pagerank_score = (
+                weights["pageRank"]["pageRank"] * torch.tensor(float(pagerank_data.get("pageRank", 0.0)), dtype=torch.float32) +
+                weights["pageRank"]["inLink"] * torch.tensor(float(pagerank_data.get("inLinkCount", 0.0)), dtype=torch.float32) +
+                weights["pageRank"]["outLink"] * torch.tensor(float(pagerank_data.get("outLinkCount", 0.0)), dtype=torch.float32)
+            )
+
+            # Metadata scoring (Simple Freshness Placeholder)
+            freshness_score = torch.rand(1).item() * weights["metadata"]["freshness"]
+
+            # Combine scores
+            combined_score = weights["bm25"] * bm25_score + pagerank_score + freshness_score
+            scores.append(combined_score)
+
+        # Convert scores to a tensor
+        scores_tensor = torch.stack(scores).unsqueeze(1)  # Stack to create a single tensor
+        return scores_tensor
     
     def get_weights(self):
         return {
-            key: {k: v.item() for k, v in value.items()}
-            if isinstance(value, nn.ParameterDict)
-            else value.item()
-            for key, value in self.weights.items()
+            "bm25_params": {"k1": self.bm25_k1.item(), "b": self.bm25_b.item()},
+            "bm25": self.bm25_weight.item(),
+            "pageRank": {
+                "pageRank": self.page_rank.item(),
+                "inLink": self.in_link.item(),
+                "outLink": self.out_link.item(),
+            },
+            "metadata": {"freshness": self.freshness.item()},
         }
 
 # Features to API (From List on website)---------------------------------------
@@ -153,46 +216,39 @@ def preprocess_data(features, labels):
     # Create a TensorDataset
     return TensorDataset(features_tensor, labels_tensor)
 
-def train_model(feats, labels, initial_weights, epochs=5, batch_size=64, lr=0.001):
+def train_model(features, labels, epochs=5, batch_size=64, lr=0.001):
     """
-    Train the WeightedRankNet model using MSLR-based fetch functions for ranking.
+    Train the WeightedRankNet model using rank_documents directly in the forward pass.
     """
-    dataset = preprocess_data(feats, labels)
+    # Create a dataset with document indices and labels
+    model = WeightedRankNet(input_dim=features.shape[1])
+    dataset = TensorDataset(torch.arange(len(global_features)), torch.tensor(labels, dtype=torch.float32))
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    # Initialize model
-    model = WeightedRankNet(input_dim=feats.shape[1], weights=initial_weights)
+    # Optimizer and loss function
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    loss_fn = nn.MSELoss()
+    loss_fn = torch.nn.L1Loss()  # Mean Absolute Error Loss
 
+    # Training loop
     model.train()
     for epoch in range(epochs):
         epoch_loss = 0.0
 
-        for batch_features, batch_labels in tqdm(dataloader, desc="Training", leave=False):
+        for batch_indices, batch_labels in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{epochs}", leave=False):
             optimizer.zero_grad()
 
-            # Predict relevance scores
-            predictions = model(batch_features)
+            # Compute predictions for the current batch
+            predictions = model(batch_indices)  # Pass document indices to the model
 
-            # Retrieve dynamically ranked documents using current weights
-            current_weights = model.get_weights()
-            ranked_results = rank_documents(
-                query=str(global_features[4]), # Feature 5
-                weights=current_weights,
-                fetch_total_doc_statistics=fetch_total_doc_statistics_mslr,
-                fetch_relevant_docs=fetch_relevant_docs_mslr,
-                fetch_doc_metadata=fetch_doc_metadata_mslr,
-                fetch_pagerank=fetch_pagerank_mslr,
-            )
-
-            # Compute loss based on predictions and labels
-            loss = loss_fn(predictions, batch_labels)
+            # Compute loss
+            loss = loss_fn(predictions, batch_labels.unsqueeze(1))  # Match dimensions for L1Loss
             loss.backward()
             optimizer.step()
 
+            # Accumulate loss
             epoch_loss += loss.item()
 
+        # Epoch metrics
         print(f"Epoch {epoch + 1}, Loss: {epoch_loss / len(dataloader):.4f}")
 
     return model
@@ -213,29 +269,12 @@ def extract_features_and_labels(train):
 global_features = None
 
 if __name__ == "__main__":
-    # Initial values
-    initial_weights = {
-        "bm25_params": {
-            "k1": 3.5,
-            "b": 0.5},
-        "bm25": 1.0,
-        "pageRank": {
-            "pageRank": 0.2,
-            "inLink": 0.1,
-            "outLink": 0.1
-        },
-        "metadata": {
-            "freshness": 1.0,
-        }
-    }
-
-    #TODO: Update this for actual testing
-    train = load_data('../data/Fold1/train.txt', 1000)
+    train = load_data('../data/Fold1/train.txt', 100000)
     feats, labels = extract_features_and_labels(train)
 
     # Train the model
     global_features = feats
-    model = train_model(feats, labels, initial_weights, epochs=20)
+    model = train_model(feats, labels, epochs=40, batch_size=128, lr=0.00001)
 
     # Print optimized weights
     optimized_weights = model.get_weights()
