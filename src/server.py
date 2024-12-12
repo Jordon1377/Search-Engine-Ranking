@@ -127,7 +127,7 @@ def getDocScores() -> list:
     return jsonify(doc_scores)
 
 # TODO: This is probably not how this is supposed to be implemented
-def fetchTotalDocStatistics(query: str) -> list:
+def fetchTotalDocStatistics() -> list:
     """
     Fetches the total document statistics for a given query.
 
@@ -141,17 +141,16 @@ def fetchTotalDocStatistics(query: str) -> list:
     """
 
     ip = INDEX_RANKING_IP
-    port = 8080 # TODO: fill in the port number
-    endpoint = 'getTotalDocStatistics'
+    port = 8000 # TODO: fill in the port number
+    endpoint = 'index/doc-stats'
     endpoint_url = f'http://{ip}:{port}/{endpoint}'
-    data = {"query": query}
-    response = requests.get(endpoint_url, json=data)
+    response = requests.get(endpoint_url)
     if response.status_code != 200:
         return None
     return response.json()
 
 # TODO: This is probably not how this is supposed to be implemented
-def fetchRelevantDocs(query: str) -> list:
+def fetchRelevantDocs(term: str) -> list:
     """
     Fetches all relevant documents for a given query term.
 
@@ -169,11 +168,11 @@ def fetchRelevantDocs(query: str) -> list:
     endpoint = 'getDocsFromIndex'
     endpoint_url = f'http://{ip}:{port}/{endpoint}'
     # go through each term in the query and get the relevant docs
-    for term in query.split():
-        data = {"query": term}
-        response = requests.get(endpoint_url, json=data)
-        if response.status_code != 200:
-            return None
+    data = {"query": term}
+    response = requests.get(endpoint_url, json=data)
+    if response.status_code != 200:
+        return None
+    return response.json()
 
 def fetchDocMetadata(docID: int) -> dict:
     """
@@ -190,13 +189,13 @@ def fetchDocMetadata(docID: int) -> dict:
 
     ip = INDEX_RANKING_IP
     port = 8080 # TODO: fill in the port number
-    endpoint = 'getDocumentMetadata'
+    endpoint = 'getDocumentMetaData'
     endpoint_url = f'http://{ip}:{port}/{endpoint}'
-    data = {"docID": docID}
-    response = requests.get(endpoint_url, json=data)
+    params = {"docID": docID}
+    response = requests.get(endpoint_url, params=params)
     if response.status_code != 200:
         return None
-    return response.json()    
+    return response.json()
 
 def fetchPageRank(url: str) -> float:
     """
