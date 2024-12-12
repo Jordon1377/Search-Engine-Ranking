@@ -3,8 +3,7 @@ from typing import Callable
 from bm25 import bm25_score, get_bm25_params
 from combine import combine_scores
 
-def rank_documents(query: str, weights: dict,
-                   fetch_total_doc_statistics: Callable[[str], list],
+def rank_documents(query: str, weights: dict, doc_stats: list,
                    fetch_relevant_docs: Callable[[str], list],
                    fetch_doc_metadata: Callable[[str], dict],
                    fetch_pagerank: Callable[[str], float]) -> list:
@@ -14,7 +13,7 @@ def rank_documents(query: str, weights: dict,
     Parameters:
         query: str The search query entered by the user.
         weights: dict Weights for scoring components.
-        fetch_total_doc_statistics: Callable[[str], list],
+        doc_stats: document stats from indexing.
         fetch_relevant_docs: Callable[[str], list]
             API call that returns all relevant documents for a given query term.
         fetch_doc_metadata: Callable[[str], dict]
@@ -25,15 +24,17 @@ def rank_documents(query: str, weights: dict,
         list of dict
             Ranked documents with metadata and final scores.
     """
-    avg_doc_len, total_docs = fetch_total_doc_statistics().values()
+    avg_doc_len, total_docs = doc_stats
     k1, b = get_bm25_params(weights)
     query_terms = tokenize_query(query)
 
     # Process and score each document
     ranked_results = {}
+    num_parsed = 0
     for term in query_terms:
         relevant_docs = fetch_relevant_docs(term)
         if not relevant_docs: continue
+        num_parsed += len(relevant_docs["index"])
 
         for doc in relevant_docs["index"]:
             doc_id = doc["docID"]
@@ -56,7 +57,7 @@ def rank_documents(query: str, weights: dict,
             })
             ranked_results[doc_id]["score"] += combined_score
 
-    return sort_ranked_results(list(ranked_results.values()))
+    return [sort_ranked_results(list(ranked_results.values())), num_parsed]
 
 def tokenize_query(query: str):
     """

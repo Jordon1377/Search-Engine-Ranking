@@ -5,6 +5,7 @@ from rank import rank_documents
 from cache import createCache
 import requests
 import os
+import time
 
 # IPs for the other VMs. May need to change this later since we haven't decided how things talk to each other.
 # Also, pretty sure not all of these teams need access to our API so maybe delete some of these?
@@ -107,13 +108,21 @@ def getDocScores() -> list:
        }
     }
     
+    doc_stats = fetchTotalDocStatistics()
+    start_time = time.time()
     try:
         if redis_cache and redis_cache.exists(query):
-            return jsonify(redis_cache.get(query))
+            doc_scores = redis_cache.get(query)
+            end_time = time.time()
+            time_to_rank = end_time - start_time
+            queryMetricsList.append(QueryMetrics(query, doc_stats, 0, len(doc_scores), time_to_rank, True))
+            return jsonify(doc_scores)
     except Exception as e:
         print(f"Error accessing cache for query: {query} - {e}")
     
-    doc_scores = rank_documents(query, weights, fetchTotalDocStatistics, fetchRelevantDocs, fetchDocMetadata, fetchPageRank)
+    doc_scores, num_parsed = rank_documents(query, weights, doc_stats, fetchRelevantDocs, fetchDocMetadata, fetchPageRank)
+    end_time = time.time()
+    time_to_rank = end_time - start_time
     if not doc_scores:
         return jsonify({"error": "Internal server error"}, 500)
     if start and end:
@@ -122,7 +131,7 @@ def getDocScores() -> list:
     if redis_cache:
         redis_cache.set(query, jsonify(doc_scores))
 
-    queryMetricsList.append(QueryMetrics(query, 0, 0, len(doc_scores), 0, False))
+    queryMetricsList.append(QueryMetrics(query, doc_stats[0], num_parsed, len(doc_scores), time_to_rank, False))
 
     return jsonify(doc_scores)
 
@@ -143,7 +152,7 @@ def fetchTotalDocStatistics() -> list:
     ip = INDEX_RANKING_IP
     port = 8000 # TODO: fill in the port number
     endpoint = 'index/doc-stats'
-    endpoint_url = f'http://{ip}:{port}/{endpoint}'
+    endpoint_url = 'http://lspt-index-ranking.cs.rpi.edu:8000/index/doc-stats'
     response = requests.get(endpoint_url)
     if response.status_code != 200:
         return None
@@ -210,15 +219,13 @@ def fetchPageRank(url: str) -> float:
         Link Analysis
     """
 
-    ip = LINK_ANALYSIS_IP
-    port = 1234 # TODO: fill in the port number
-    endpoint = 'ranking/score'
-    endpoint_url = f'http://{ip}:{port}/{endpoint}/{url}'
+    base_endpoint = 'http://lspt-link-analysis.cs.rpi.edu:1234/ranking'
+    endpoint_url = f'{base_endpoint}/{url}'
     response = requests.get(endpoint_url)
     if response.status_code != 200:
         return None
     
-    rank = response.json().get('page_rank')
+    rank = response.json().get('pageRank')
     if not rank:
         return None
     return rank
@@ -234,7 +241,7 @@ def reportMetrics():
     ip = DATA_EVAL_IP
     port = '8080' # TODO: fill in the port number
     endpoint = '/v0/ReportMetrics'
-    endpoint_url = f'http://{ip}:{port}/{endpoint}'
+    endpoint_url = 'http://lspt-data-eval.cs.rpi.edu:8080/v0/ReportMetrics'
     query_metrics = [metric.toDict() for metric in queryMetricsList]
     data = {"metrics": query_metrics}
 
@@ -245,7 +252,7 @@ def reportMetrics():
         print(f"Error sending metrics: {e}")
 
 if __name__ == '__main__':
-    scheduler = BackgroundScheduler()
+    scheduler = BackgroundScheduler(timezone='UTC')
     scheduler.add_job(reportMetrics, 'interval', hours=24)
     scheduler.start()
     redis_cache = createCache()
