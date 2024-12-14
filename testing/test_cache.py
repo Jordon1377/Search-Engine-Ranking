@@ -182,7 +182,7 @@ class TestCache(unittest.TestCase):
         ranked_results = rank_documents(
             query=query,
             weights={},
-            fetch_total_doc_statistics=self.fetch_total_doc_statistics,
+            doc_stats=[798.8730, 4567876],
             fetch_relevant_docs=self.fetch_relevant_docs,
             fetch_doc_metadata=self.fetch_doc_metadata,
             fetch_pagerank=self.fetch_pagerank

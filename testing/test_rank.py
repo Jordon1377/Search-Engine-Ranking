@@ -88,10 +88,7 @@ class TestSortRankedResults(unittest.TestCase):
 class TestRankDocuments(unittest.TestCase):
     def setUp(self):
         # Mock the API calls
-        self.fetch_total_doc_statistics = MagicMock(return_value={
-            "avgDocLength": 798.8730,
-            "docCount": 4567876
-        })
+        self.fetch_total_doc_statistics = [798.8730, 4567876]
 
         self.fetch_relevant_docs = MagicMock(side_effect=lambda term: {
             "data": {
@@ -201,10 +198,10 @@ class TestRankDocuments(unittest.TestCase):
         """Test with multiple query terms (data science)."""
         query = "data science"
 
-        ranked_results = rank_documents(
+        ranked_results, num_parsed = rank_documents(
             query=query,
             weights={},
-            fetch_total_doc_statistics=self.fetch_total_doc_statistics,
+            doc_stats=self.fetch_total_doc_statistics,
             fetch_relevant_docs=self.fetch_relevant_docs,
             fetch_doc_metadata=self.fetch_doc_metadata,
             fetch_pagerank=self.fetch_pagerank
@@ -227,10 +224,10 @@ class TestRankDocuments(unittest.TestCase):
         """Test with a single query term (data)."""
         query = "data"
 
-        ranked_results = rank_documents(
+        ranked_results, num_parsed = rank_documents(
             query=query,
             weights={},
-            fetch_total_doc_statistics=self.fetch_total_doc_statistics,
+            doc_stats=self.fetch_total_doc_statistics,
             fetch_relevant_docs=self.fetch_relevant_docs,
             fetch_doc_metadata=self.fetch_doc_metadata,
             fetch_pagerank=self.fetch_pagerank
@@ -257,10 +254,10 @@ class TestRankDocuments(unittest.TestCase):
         """Test ranking without weights."""
         query = "data science"
 
-        ranked_results = rank_documents(
+        ranked_results, num_parsed = rank_documents(
             query=query,
             weights={},  # No weights applied
-            fetch_total_doc_statistics=self.fetch_total_doc_statistics,
+            doc_stats=self.fetch_total_doc_statistics,
             fetch_relevant_docs=self.fetch_relevant_docs,
             fetch_doc_metadata=self.fetch_doc_metadata,
             fetch_pagerank=self.fetch_pagerank
@@ -292,10 +289,10 @@ class TestRankDocuments(unittest.TestCase):
             }
         }
 
-        ranked_results = rank_documents(
+        ranked_results, num_parsed = rank_documents(
             query=query,
             weights=weights,
-            fetch_total_doc_statistics=self.fetch_total_doc_statistics,
+            doc_stats=self.fetch_total_doc_statistics,
             fetch_relevant_docs=self.fetch_relevant_docs,
             fetch_doc_metadata=self.fetch_doc_metadata,
             fetch_pagerank=self.fetch_pagerank
